@@ -30,9 +30,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-go@v7.0.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: true
@@ -61,7 +61,7 @@ jobs:
       # Use protocol 28 for the Soroban SDK 28 contracts and keep Quickstart
       # pinned so its Core/RPC versions cannot drift independently.
       - name: start local Stellar network
-        uses: stellar/quickstart@main
+        uses: stellar/quickstart@f7fe0705ddff93ea21e70953465ed4b5e82b6a72 # main 2026-11-09 (no release tags)
         with:
           tag: v676-b1505.1-latest
           network: local
