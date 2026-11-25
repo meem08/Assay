@@ -163,7 +163,9 @@ jobs:
   fuzz:
     name: Fuzz (short)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # 11 targets x 20s plus a per-target instrumented build already takes
+    # ~285-315s, so a 5-minute limit cancelled the job on runner jitter alone.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
