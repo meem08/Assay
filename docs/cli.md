@@ -98,6 +98,20 @@ every output — report, evidence lines, preimage — prints, so the bytes
 `<network>` segment is not checked: which ledger the scan reads is settled by
 the scanner's network binding (#41), not by the address bar.
 
+### The Horizon endpoint (`-horizon`)
+
+`scan`, `attestation` and `serve` take `-horizon URL` to choose the Horizon
+server they read from. The flag overrides the `ASSAY_HORIZON_URL` environment
+variable, which in turn overrides the public default
+(`https://horizon.stellar.org`). Evidence URLs in the report name the endpoint
+that actually answered, so a report produced against a private Horizon says so.
+
+```
+./assay scan -horizon https://horizon.example.org CODE-ISSUER
+./assay attestation -horizon https://horizon.example.org CODE-ISSUER
+./assay serve -addr :8080 -horizon https://horizon.example.org
+```
+
 ## assay scan
 
 Scans one asset and prints the full report: the findings, the reasoning behind
@@ -286,8 +300,10 @@ whether it was ever different.
 
 Each entry carries the asset, the report's severity at scan time, the
 **transition** — what the issuer was observed doing, reduced to a term
-(`malicious`, `listed as`, `blocked`, `unverified`, `not retrievable`, …) — the
-observation's reason verbatim, and the time it was retrieved.
+(`malicious`, `listed as`, `blocked`, or `not retrievable`) — the observation's
+reason verbatim, and the time it was retrieved. These labels come from the
+check, evidence source, fetch status, and structured outcome. Claim text is
+shown as the reason only; it does not determine the label.
 
 An observation that does not reduce to a known transition prints as
 `unknown`. The history view deliberately does not re-derive the verdict; it
@@ -309,7 +325,7 @@ Semantics:
 - **valid state** — the observations print in time order.
 - **missing state** — a clear message (`no observations for ASSET`), and exit
   0 unless `-guarantee` was given.
-- **unknown state** — an observation whose claim matches no known transition
+- **unknown state** — an observation without a recognized structured outcome
   prints with transition `unknown` rather than being dropped.
 
 ## assay verify-preimage

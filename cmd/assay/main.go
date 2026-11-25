@@ -205,6 +205,8 @@ func runWith(args []string, d commandDeps) error {
 func runScan(args []string, d commandDeps) error {
 	fs := newFlagSet("scan")
 	assetLists := assetListFlags(fs)
+	horizonURL := fs.String("horizon", "",
+		"Horizon base URL to use for scanning (overrides ASSAY_HORIZON_URL)")
 	cache := cacheFlags(fs)
 	recordDir := fs.String("record", "",
 		"save every upstream response into DIR for later -replay")
@@ -223,6 +225,14 @@ func runScan(args []string, d commandDeps) error {
 	if *recordDir != "" && *replayDir != "" {
 		return fmt.Errorf("-record and -replay are mutually exclusive")
 	}
+
+	// Resolve the Horizon URL: flag takes precedence, then environment variable.
+	hz := *horizonURL
+	if hz == "" {
+		hz = os.Getenv("ASSAY_HORIZON_URL")
+	}
+	// Set the env var so that scan.New() picks it up.
+	os.Setenv("ASSAY_HORIZON_URL", hz) // nolint:errcheck
 
 	scanFn, finish, err := scanFuncForRecording(assetLists(), cache(), d, *recordDir, *replayDir)
 	if err != nil {
@@ -395,6 +405,8 @@ func (l *listFlag) Set(v string) error {
 func runAttestation(args []string, d commandDeps) error {
 	fs := newFlagSet("attestation")
 	assetLists := assetListFlags(fs)
+	horizonFlag := fs.String("horizon", "",
+		"Horizon base URL to use for scanning (overrides ASSAY_HORIZON_URL)")
 	cache := cacheFlags(fs)
 	preimage := fs.Bool("preimage", false, "include the canonical bytes evidence_hash commits to")
 	raw := fs.Bool("raw", false, "print only the attest() arguments, tab-separated, for scripting")
@@ -420,6 +432,14 @@ func runAttestation(args []string, d commandDeps) error {
 	if err != nil {
 		return fmt.Errorf("attestation: %w", err)
 	}
+
+	// Resolve the Horizon URL: flag takes precedence, then environment variable.
+	hz := *horizonFlag
+	if hz == "" {
+		hz = os.Getenv("ASSAY_HORIZON_URL")
+	}
+	// Set the env var so that scan.New() picks it up.
+	os.Setenv("ASSAY_HORIZON_URL", hz) // nolint:errcheck
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -663,48 +683,43 @@ func history(rep *mechanics.Report) []historyEntry {
 		return nil
 	}
 	hist := make([]historyEntry, 0, len(rep.Evidence))
-	for _, e := range rep.Evidence {
-		hist = append(hist, historyEntry{
-			Asset:      rep.Asset.String(),
-			Severity:   rep.Severity.String(),
-			Transition: transition(e.Claim),
-			Reason:     e.Claim,
-			Time:       e.RetrievedAt.Time(),
-		})
+	for _, finding := range rep.Findings {
+		for _, e := range finding.Evidence {
+			hist = append(hist, historyEntry{
+				Asset:      rep.Asset.String(),
+				Severity:   rep.Severity.String(),
+				Transition: transition(finding, e),
+				Reason:     e.Claim,
+				Time:       e.RetrievedAt.Time(),
+			})
+		}
 	}
 	return hist
 }
 
-// transition reduces a plain-language evidence claim to the term the
-// consumer prints: whatever the issuer was observed doing, or unknown when a
-// source did not answer.
-func transition(claim string) string {
-	if claim == "" {
-		return "unknown"
+// transition classifies an observation from the check and source that
+// produced it. Claim text may contain issuer-controlled values, so it is
+// preserved as the reason but never used to choose the transition.
+func transition(finding mechanics.Finding, evidence mechanics.Evidence) string {
+	if evidence.Attempted {
+		return "not retrievable"
 	}
-	low := strings.ToLower(claim)
-	for _, s := range candidateTransitions {
-		if strings.Contains(low, s) {
-			return s
+	if finding.Check == "reputation" {
+		switch evidence.Source {
+		case "stellar.expert/directory":
+			switch evidence.Outcome {
+			case mechanics.EvidenceOutcomeMalicious:
+				return "malicious"
+			case mechanics.EvidenceOutcomeListed:
+				return "listed as"
+			}
+		case "stellar.expert/blocked-domains":
+			if evidence.Outcome == mechanics.EvidenceOutcomeBlocked {
+				return "blocked"
+			}
 		}
 	}
 	return "unknown"
-}
-
-// candidateTransitions is the set of ways an observation can read in this
-// project. It is deliberately small: the history view does not re-derive the
-// verdict, it only reports what each observation says.
-var candidateTransitions = []string{
-	"malicious",
-	"listed as",
-	"blocked",
-	"unverified",
-	"not retrievable",
-	"not present",
-	"credits",
-	"claims",
-	"borrow",
-	"pay",
 }
 
 type historyEntry struct {
@@ -732,6 +747,8 @@ func openHistory(path string, retention int) (*historystore.Store, error) {
 func runServe(args []string, log *slog.Logger) error {
 	fs := newFlagSet("serve")
 	assetLists := assetListFlags(fs)
+	horizonFlag := fs.String("horizon", "",
+		"Horizon base URL to use for scanning (overrides ASSAY_HORIZON_URL)")
 	cache := cacheFlags(fs)
 	addr := fs.String("addr", ":8080", "listen address")
 	historyPath := fs.String("history", "",
@@ -750,6 +767,14 @@ func runServe(args []string, log *slog.Logger) error {
 	if *historyRetention < 1 {
 		return usagef("serve: -history-retention must be at least 1, got %d", *historyRetention)
 	}
+
+	// Resolve the Horizon URL: flag takes precedence, then environment variable.
+	hz := *horizonFlag
+	if hz == "" {
+		hz = os.Getenv("ASSAY_HORIZON_URL")
+	}
+	// Set the env var so that newScanner() / scan.New() picks it up.
+	os.Setenv("ASSAY_HORIZON_URL", hz) // nolint:errcheck
 
 	// The server is where a list configuration matters most: every scan it
 	// serves consults the same configured lists, attributed the same way, and
